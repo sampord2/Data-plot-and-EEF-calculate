@@ -1,11 +1,11 @@
 #data log plot and EEF simple calculate for VM7000/PW3335 Data Collection
 #-------------------------------------------------------------------------------
 #Rev.1.4 新增日期時間增減功能
-#Rev.2.0 新增光棒移動來設定計算範圍,將圖表改為內崁式
+#Rev.2.0 新增光棒移動來設定計算範圍,將圖表改為內崁式,新增能耗計算模組
 #-------------------------------------------------------------------------------
 # 
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -14,6 +14,226 @@ from matplotlib import rcParams
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
 import sys  # 引入 sys 模組以便退出程式
+
+class EnergyCalculator:
+    def __init__(self):
+        pass
+    def current_ef_thresholds(self,energy_allowance,fridge_type):
+        if fridge_type == 5:
+            #IF(fridge_type=5,ROUND(N4*1.72,1),ROUND(N4*1.6,1))
+            threshold_lv1 = round(energy_allowance * 1.72,1)
+            threshold_lv2 = round(energy_allowance * 1.54,1)
+            threshold_lv3 = round(energy_allowance * 1.36,1)
+            threshold_lv4 = round(energy_allowance * 1.18,1)
+        else:
+            #IF(fridge_type=5,ROUND(N4*1.72,1),ROUND(N4*1.6,1))
+            threshold_lv1 = round(energy_allowance * 1.6,1)
+            threshold_lv2 = round(energy_allowance * 1.45,1)
+            threshold_lv3 = round(energy_allowance * 1.3,1)
+            threshold_lv4 = round(energy_allowance * 1.15,1)
+        return[ threshold_lv1, threshold_lv2, threshold_lv3, threshold_lv4 ]
+
+    def future_ef_thresholds(self,energy_allowance,fridge_type):
+        if fridge_type == 5:
+            #IF(fridge_type=5,ROUND(N4*1.72,1),ROUND(N4*1.6,1))
+            threshold_lv1 = round(energy_allowance * 1.294,1)
+            threshold_lv2 = round(energy_allowance * 1.221,1)
+            threshold_lv3 = round(energy_allowance * 1.147,1)
+            threshold_lv4 = round(energy_allowance * 1.074,1)
+        else:
+            #IF(fridge_type=5,ROUND(N4*1.72,1),ROUND(N4*1.6,1))
+            threshold_lv1 = round(energy_allowance * 1.308,1)
+            threshold_lv2 = round(energy_allowance * 1.231,1)
+            threshold_lv3 = round(energy_allowance * 1.154,1)
+            threshold_lv4 = round(energy_allowance * 1.077,1)
+        return[ threshold_lv1, threshold_lv2, threshold_lv3, threshold_lv4 ]
+
+
+    def calculate(self, VF, VR, daily_consumption, fridge_temp, freezer_temp, fan_type):
+        """
+        計算冰箱能耗相關指標
+        
+        參數:
+            VR: 冷藏室容積(L)
+            VF: 冷凍室容積(L)
+            daily_consumption: 日耗電量(kWh/日)
+            fridge_temp: 冷藏室溫度(°C), 預設3.0
+            freezer_temp: 冷凍室溫度(°C), 預設-18.0
+        
+        返回:
+            包含所有計算結果的字典
+        """
+        results = {}
+        
+        # 1. 計算K值 (溫度係數)
+        K = self.calculate_K_value(freezer_temp, fridge_temp)
+        #print(f"K值: {K}")
+        # 2. 計算等效內容積
+        equivalent_volume = self.calculate_equivalent_volume(VR, VF, K)
+        
+        # 3. 確定冰箱型式
+        fridge_type = self.determine_fridge_type(equivalent_volume, VR, VF, fan_type)
+        #print(f"冰箱型式: {fridge_type}")
+        # 4. 計算容許耗用能源基準 (每月)
+        energy_allowance = self.calculate_energy_allowance(equivalent_volume, fridge_type)
+        
+        # 5. 計算2027容許耗用能源基準
+        future_energy_allowance = self.calculate_future_energy_allowance(equivalent_volume, fridge_type)
+        
+        # 6. 計算耗電量基準 (每月)
+        benchmark_consumption = self.calculate_benchmark_consumption(equivalent_volume, energy_allowance)
+        
+        # 7. 計算2027耗電量基準
+        future_benchmark_consumption = self.calculate_future_benchmark_consumption(equivalent_volume, future_energy_allowance)
+        
+        # 8. 計算實測月耗電量
+        monthly_consumption = round(daily_consumption * 30,1)
+        
+        # 9. 計算EF值 (能效因子)
+        ef_value = round(equivalent_volume / monthly_consumption,1)
+        
+        # 9.1 計算現有效率基準百分比和等級
+        current_ef_thresholds = self.current_ef_thresholds(energy_allowance, fridge_type)
+
+        # 10. 計算現有效率基準百分比和等級
+        current_percent, current_grade = self.calculate_current_efficiency(ef_value, current_ef_thresholds)
+        
+        # 10.1 計算2027新效率基準百分比和等級
+        future_ef_thresholds = self.future_ef_thresholds(future_energy_allowance, fridge_type)
+
+        # 11. 計算2027新效率基準百分比和等級
+        future_percent, future_grade = self.calculate_future_efficiency(ef_value, future_ef_thresholds)
+        
+        # 整理所有結果
+        results.update({
+            '冷凍室溫度(°C)': freezer_temp,
+            '冷藏室溫度(°C)': fridge_temp,
+            'K值': K,
+            'VF(L)': VF,
+            'VR(L)': VR,
+            '等效內容積(L)': equivalent_volume,
+            '冰箱型式': fridge_type,
+            '容許耗用能源基準(L/kWh/月)': energy_allowance,
+            '2027容許耗用能源基準(L/kWh/月)': future_energy_allowance,
+            '耗電量基準(kWh/月)': benchmark_consumption,
+            '2027耗電量基準(kWh/月)': future_benchmark_consumption,
+            '實測月耗電量(kWh/月)': monthly_consumption,
+            'EF值': ef_value,
+            '現有效率基準百分比(%)': current_percent,
+            '現有效率等級': current_grade,
+            '2027新效率基準百分比(%)': future_percent,
+            '2027新效率等級': future_grade
+        })
+        
+        return results
+    
+    def calculate_K_value(self, freezer_temp, fridge_temp):
+        """計算K值 (溫度係數)"""
+        # 根據公式 K = (30 - 冷凍庫溫度) / (30 - 冷藏庫溫度)
+        print(f"冷凍庫溫度: {freezer_temp}, 冷藏庫溫度: {fridge_temp}")        
+        return round((30 - freezer_temp) / (30 - fridge_temp), 2)
+    
+    def calculate_equivalent_volume(self, VR, VF, K):
+        """計算等效內容積"""
+        return round(VR + (K * VF), 1)
+    
+    def determine_fridge_type(self, equivalent_volume, VR, VF, fan_type):
+        """確定冰箱型式"""
+        if VF == 0:  # 只有冷藏室
+            return 5
+        elif equivalent_volume < 400 and fan_type == 1:
+            return 1  # 假設是風冷式(實際應根據具體設計)
+        elif equivalent_volume >= 400 and fan_type == 1:
+            return 2
+        elif equivalent_volume < 400 and fan_type == 0:
+            return 3
+        else:
+            return 4  # 假設是風冷式(實際應根據具體設計)
+    
+    def calculate_energy_allowance(self, equivalent_volume, fridge_type):
+        """計算容許耗用能源基準"""
+        # 根據公式，ROUND(IFS(fridge_type=1,equivalent_volume/(0.037*equivalent_volume+24.3),fridge_type=2,equivalent_volume/(0.031*M4+21),fridge_type=3,equivalent_volume/(0.033*equivalent_volume+19.7),fridge_type=4,equivalent_volume/(0.029*equivalent_volume+17),fridge_type=5,equivalent_volume/(0.033*equivalent_volume+15.8)),1)
+        if fridge_type == 1:
+            return round( equivalent_volume / (0.037 * equivalent_volume + 24.3), 1)
+        elif fridge_type == 2:
+            return round( equivalent_volume / (0.031 * equivalent_volume + 21), 1)
+        elif fridge_type == 3:
+            return round( equivalent_volume / (0.033 * equivalent_volume + 19.7), 1)
+        elif fridge_type == 4:
+            return round( equivalent_volume / (0.029 * equivalent_volume + 17), 1)
+        else:
+            return round( equivalent_volume / (0.033 * equivalent_volume + 15.8), 1)
+    
+    def calculate_future_energy_allowance(self, equivalent_volume, fridge_type):
+        """計算2027年容許耗用能源基準"""
+        # 公式:=ROUND(IFS(F4=1,1.3*M4/(0.037*M4+24.3),F4=2,1.3*M4/(0.031*M4+21),F4=3,1.3*M4/(0.033*M4+19.7),F4=4,1.3*M4/(0.029*M4+17),F4=5,1.36*M4/(0.033*M4+15.8)),1)
+        # F4 = fridge_type, M4 = equivalent_volume
+        if fridge_type == 1:
+            return round( 1.3 * equivalent_volume / (0.037 * equivalent_volume + 24.3), 1)
+        elif fridge_type == 2:
+            return round( 1.3 * equivalent_volume / (0.031 * equivalent_volume + 21), 1)
+        elif fridge_type == 3:
+            return round(1.3 * equivalent_volume / (0.033 * equivalent_volume + 19.7), 1)
+        elif fridge_type == 4:
+            return round(1.3 * equivalent_volume / (0.029 * equivalent_volume + 17), 1)
+        else:
+            return round(1.36 * equivalent_volume / (0.033 * equivalent_volume + 15.8), 1)
+
+    def calculate_benchmark_consumption(self, equivalent_volume, energy_allowance):
+        """計算耗電量基準"""
+        # 根據公式:ROUND(equivalent_volume / energy_allowance, 1)
+        return round(equivalent_volume / energy_allowance, 1)
+    
+    def calculate_future_benchmark_consumption(self, equivalent_volume, future_energy_allowance):
+        """計算2027耗電量基準"""
+        return round(equivalent_volume / future_energy_allowance, 1)
+    
+    def calculate_current_efficiency(self, ef_value, thresholds):
+        # 確定等級
+        if ef_value >= thresholds[0]:
+            grade = "1級"
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
+        elif ef_value >= thresholds[0] * 0.95:
+            grade = "1*級"
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
+        elif ef_value >= thresholds[1]:
+            grade = "2級"
+            final_percent = round(ef_value / thresholds[1] * 100, 1)
+        elif ef_value >= thresholds[2]:
+            grade = "3級"
+            final_percent = round(ef_value / thresholds[2] * 100, 1)
+        elif ef_value >= thresholds[3]:
+            grade = "4級"
+            final_percent = round(ef_value / thresholds[3] * 100, 1)
+        else :
+            grade = "5級"
+            final_percent = round(ef_value / thresholds[3] * 100, 1)
+        
+        return final_percent, grade
+    
+    def calculate_future_efficiency(self, ef_value, thresholds):
+        # 確定等級
+        if ef_value >= thresholds[0]:
+            grade = "1級"
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
+        elif ef_value >= thresholds[0] * 0.95:
+            grade = "1*級"
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
+        elif ef_value >= thresholds[1]:
+            grade = "2級"
+            final_percent = round(ef_value / thresholds[1] * 100, 1)
+        elif ef_value >= thresholds[2]:
+            grade = "3級"
+            final_percent = round(ef_value / thresholds[2] * 100, 1)
+        elif ef_value >= thresholds[3]:
+            grade = "4級"
+            final_percent = round(ef_value / thresholds[3] * 100, 1)
+        else :
+            grade = "5級"
+            final_percent = round(ef_value / thresholds[3] * 100, 1)
+        
+        return final_percent, grade
+
 
 # 在程式中的適當位置（例如在plot_chart函數之前）添加DraggableLine類
 class DraggableLine:
@@ -246,6 +466,28 @@ def calculate_statistics():
             wp_difference = "無法計算，缺少 WP(Wh) 欄位"
             wp_24h_difference = "無法計算，缺少 WP(Wh) 欄位"
 
+            
+        # 計算能耗
+        fan_type = fan_type_var.get()  # 取得風扇類型的狀態
+        vf = float(vf_entry_var.get()) if vf_entry_var.get().isdigit() else 0
+        vr = float(vr_entry_var.get()) if vr_entry_var.get().isdigit() else 0
+        fridge_temp = float(temp_r_entry_var.get()) if temp_r_entry_var.get().replace('.', '', 1).isdigit() else 3  # 冷藏室溫度
+        freezer_temp = float(temp_f_entry_var.get()) if temp_f_entry_var.get().replace('.', '', 1).lstrip('-').isdigit() else -18.0  # 冷凍室溫度
+        energy_calculator = EnergyCalculator()
+        if isinstance(wp_24h_difference, (int, float)) and vf > 0 and vr > 0:
+            daily_consumption = wp_24h_difference / 1000  # 將 Wh 轉換為 kWh
+            # 計算
+            results = energy_calculator.calculate(vf, vr, daily_consumption, fridge_temp, freezer_temp, fan_type)
+            # 提取結果
+            if results:
+                # 打印結果
+                print("冰箱能耗計算結果:")
+                for key, value in results.items():
+                    print(f"{key}: {value}")
+        else:
+            results = None
+            print("無耗電量數據,無法計算能耗")
+
         # 顯示結果
         result_textbox.delete(1.0, tk.END)  # 清空文字框
         result_textbox.insert(tk.END, f"統計範圍：{start} ~ {end}\n")
@@ -258,8 +500,15 @@ def calculate_statistics():
         result_textbox.insert(tk.END, f"On / Off 百分比: {above_percentage:.2f}%\n")
         result_textbox.insert(tk.END, f"\n電力消耗：{wp_difference:.2f} w / {minutes_difference} 分\n")
         result_textbox.insert(tk.END, f"24 小時電力消耗：{wp_24h_difference:.1f} w\n")
+        result_textbox.insert(tk.END, f"\n能耗計算：\n")
+        if results:
+            for key, value in results.items():
+                result_textbox.insert(tk.END, f"{key}: {value}\n")
+        else:
+            result_textbox.insert(tk.END, "無法計算能耗，請檢查數據\n")
     except Exception as e:
         messagebox.showerror("錯誤", f"計算平均值或電力啟停周期時發生錯誤：{e}")
+        print(f"錯誤詳情：{e}")
 
 # 新增儲存結果的函數
 def save_results():
@@ -327,7 +576,7 @@ rcParams['axes.unicode_minus'] = False  # 解決負號無法顯示的問題
 
 # 初始化主視窗
 root = tk.Tk()
-root.title("CSV Plotter with Statistics")
+root.title("CSV Plotter with Statistics 2.0")
 
 # 全域變數
 csv_path = tk.StringVar()
@@ -360,14 +609,38 @@ result_frame.grid(row=1, column=0, padx=5, pady=10)
 # 創建多行文字框
 result_textbox = tk.Text(
     result_frame, 
-    width=70, 
+    width=50, 
     height=30, 
     wrap=tk.WORD  # 自動換行
 )
-result_textbox.grid(row=0, rowspan=5, column=0, padx=5, pady=5)
+result_textbox.grid(row=0, rowspan=12, column=0, padx=5, pady=5)
 
+# 能耗計算用欄位
+tk.Label(result_frame, text="能耗計算用:").grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky="nsew")
+tk.Label(result_frame, text="冷凍室容積(L):").grid(row=1, column=1, padx=5, pady=5, sticky="w")
+vf_entry_var = tk.StringVar(value="150")
+vf_entry = tk.Entry(result_frame, width=5, textvariable=vf_entry_var)
+vf_entry.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+tk.Label(result_frame, text="F:").grid(row=1, column=2, padx=5, pady=5, sticky="w")
+temp_f_entry_var = tk.StringVar(value="-18.0")
+temp_f_entry = tk.Entry(result_frame, width=5, textvariable=temp_f_entry_var)
+temp_f_entry.grid(row=2, column=2, padx=5, pady=5, sticky="w")
+tk.Label(result_frame, text="冷藏室容積(L):").grid(row=3, column=1, padx=5, pady=5, sticky="w")
+vr_entry_var = tk.StringVar(value="350")
+vr_entry = tk.Entry(result_frame, width=5, textvariable=vr_entry_var)
+vr_entry.grid(row=4, column=1, padx=5, pady=5, sticky="w")
+tk.Label(result_frame, text="R:").grid(row=3, column=2, padx=5, pady=5, sticky="w")
+temp_r_entry_var = tk.StringVar(value="3.0")
+temp_r_entry = tk.Entry(result_frame, width=5, textvariable=temp_r_entry_var)
+temp_r_entry.grid(row=4, column=2, padx=5, pady=5, sticky="w")
+fan_type_var = tk.IntVar(value=1)  # 0: unchecked, 1: checked
+fan_type_checkbox = tk.Checkbutton(result_frame, text="風扇式", variable=fan_type_var)
+fan_type_checkbox.grid(row=5, column=1, padx=5, pady=5, sticky="w")
+
+# 分割線
+ttk.Separator(result_frame, orient="horizontal").grid(row=6, column=1, sticky="ew", pady=10)
 # 開始日期與時間
-tk.Label(result_frame, text="資料日期:").grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky="nsew")
+tk.Label(result_frame, text="資料日期:").grid(row=7, column=1, columnspan=2, padx=5, pady=5, sticky="nsew")
 def increment_date_time(var, increment, unit):
     try:
         current_value = pd.to_datetime(var.get())
@@ -391,19 +664,19 @@ def bind_increment(widget, var, unit):
 
 
 start_date_entry = tk.Entry(result_frame, textvariable=start_date, width=10)
-start_date_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+start_date_entry.grid(row=8, column=1, padx=5, pady=5, sticky="w")
 bind_increment(start_date_entry, start_date, "day")
 
 start_time_entry = tk.Entry(result_frame, textvariable=start_time, width=10)
-start_time_entry.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+start_time_entry.grid(row=9, column=1, padx=5, pady=5, sticky="w")
 bind_increment(start_time_entry, start_time, "hour")
 
 end_date_entry = tk.Entry(result_frame, textvariable=end_date, width=10)
-end_date_entry.grid(row=3, column=1, padx=5, pady=5, sticky="w")
+end_date_entry.grid(row=10, column=1, padx=5, pady=5, sticky="w")
 bind_increment(end_date_entry, end_date, "day")
 
 end_time_entry = tk.Entry(result_frame, textvariable=end_time, width=10)
-end_time_entry.grid(row=4, column=1, padx=5, pady=5, sticky="w")
+end_time_entry.grid(row=11, column=1, padx=5, pady=5, sticky="w")
 bind_increment(end_time_entry, end_time, "hour")
 
 fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(8, 6), facecolor='lightgray')
