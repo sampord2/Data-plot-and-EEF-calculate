@@ -99,7 +99,10 @@ class EnergyCalculator:
         monthly_consumption = round(daily_consumption * 30,1)
         
         # 9. 計算EF值 (能效因子)
-        ef_value = round(equivalent_volume / monthly_consumption,1)
+        if monthly_consumption == 0:
+            ef_value = 0.0
+        else:
+            ef_value = round(equivalent_volume / monthly_consumption,1)
         
         # 9.1 計算現有效率基準百分比和等級
         current_ef_thresholds = self.current_ef_thresholds(energy_allowance, fridge_type)
@@ -115,23 +118,25 @@ class EnergyCalculator:
         
         # 整理所有結果
         results.update({
-            '冷凍室溫度(°C)': freezer_temp,
-            '冷藏室溫度(°C)': fridge_temp,
+            '冷凍室溫度': freezer_temp,
+            '冷藏室溫度': fridge_temp,
             'K值': K,
             'VF(L)': VF,
             'VR(L)': VR,
             '等效內容積(L)': equivalent_volume,
             '冰箱型式': fridge_type,
-            '容許耗用能源基準(L/kWh/月)': energy_allowance,
-            '2027容許耗用能源基準(L/kWh/月)': future_energy_allowance,
-            '耗電量基準(kWh/月)': benchmark_consumption,
-            '2027耗電量基準(kWh/月)': future_benchmark_consumption,
-            '實測月耗電量(kWh/月)': monthly_consumption,
+            '\n----能效相關計算結果----': '',
             'EF值': ef_value,
-            '現有效率基準百分比(%)': current_percent,
-            '現有效率等級': current_grade,
-            '2027新效率基準百分比(%)': future_percent,
-            '2027新效率等級': future_grade
+            '實測月耗電量(kWh/月)': monthly_consumption,
+            '2018年容許耗用能源基準(L/kWh/月)': energy_allowance,
+            '2018年耗電量基準(kWh/月)': benchmark_consumption,
+            '2018年效率等級': current_grade,
+            '2018年一級效率百分比(%)': current_percent,
+            '\n----2027年新能效公式----': '',
+            '2027容許耗用能源基準(L/kWh/月)': future_energy_allowance,
+            '2027年耗電量基準(kWh/月)': future_benchmark_consumption,
+            '2027年效率等級': future_grade,
+            '2027年一級效率百分比(%)': future_percent
         })
         
         return results
@@ -673,7 +678,7 @@ fan_type_checkbox.grid(row=5, column=1, padx=5, pady=5, sticky="w")
 # 分割線
 ttk.Separator(result_frame, orient="horizontal").grid(row=6, column=1, sticky="ew", pady=10)
 # 開始日期與時間
-tk.Label(result_frame, text="資料日期:").grid(row=7, column=1, columnspan=2, padx=5, pady=5, sticky="nsew")
+tk.Label(result_frame, text="計算範圍:").grid(row=7, column=1, columnspan=2, padx=5, pady=5, sticky="nsew")
 def increment_date_time(var, increment, unit):
     try:
         current_value = pd.to_datetime(var.get())
