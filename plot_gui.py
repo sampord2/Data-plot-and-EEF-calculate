@@ -140,13 +140,13 @@ class EnergyCalculator:
             '2027年效率等級': future_grade,
             '2027年一級效率百分比(%)': future_percent
         })
-        
+        #print(f"threshold: {current_ef_thresholds}, {future_ef_thresholds}")
         return results
     
     def calculate_K_value(self, freezer_temp, fridge_temp):
         """計算K值 (溫度係數)"""
         # 根據公式 K = (30 - 冷凍庫溫度) / (30 - 冷藏庫溫度)
-        print(f"冷凍庫溫度: {freezer_temp}, 冷藏庫溫度: {fridge_temp}")        
+        #print(f"冷凍庫溫度: {freezer_temp}, 冷藏庫溫度: {fridge_temp}")        
         return round((30 - freezer_temp) / (30 - fridge_temp), 2)
     
     def calculate_equivalent_volume(self, VR, VF, K):
@@ -214,16 +214,16 @@ class EnergyCalculator:
             final_percent = round(ef_value / thresholds[0] * 100, 1)
         elif ef_value >= thresholds[1]:
             grade = "2級"
-            final_percent = round(ef_value / thresholds[1] * 100, 1)
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
         elif ef_value >= thresholds[2]:
             grade = "3級"
-            final_percent = round(ef_value / thresholds[2] * 100, 1)
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
         elif ef_value >= thresholds[3]:
             grade = "4級"
-            final_percent = round(ef_value / thresholds[3] * 100, 1)
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
         else :
             grade = "5級"
-            final_percent = round(ef_value / thresholds[3] * 100, 1)
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
         
         return final_percent, grade
     
@@ -237,16 +237,16 @@ class EnergyCalculator:
             final_percent = round(ef_value / thresholds[0] * 100, 1)
         elif ef_value >= thresholds[1]:
             grade = "2級"
-            final_percent = round(ef_value / thresholds[1] * 100, 1)
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
         elif ef_value >= thresholds[2]:
             grade = "3級"
-            final_percent = round(ef_value / thresholds[2] * 100, 1)
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
         elif ef_value >= thresholds[3]:
             grade = "4級"
-            final_percent = round(ef_value / thresholds[3] * 100, 1)
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
         else :
             grade = "5級"
-            final_percent = round(ef_value / thresholds[3] * 100, 1)
+            final_percent = round(ef_value / thresholds[0] * 100, 1)
         
         return final_percent, grade
 
@@ -509,11 +509,11 @@ def calculate_statistics():
             # 計算
             results = energy_calculator.calculate(vf, vr, daily_consumption, fridge_temp, freezer_temp, fan_type)
             # 提取結果
-            if results:
+            #if results:
                 # 打印結果
-                print("冰箱能耗計算結果:")
-                for key, value in results.items():
-                    print(f"{key}: {value}")
+                #print("冰箱能耗計算結果:")
+                #for key, value in results.items():
+                    #print(f"{key}: {value}")
         else:
             results = None
             print("無耗電量數據,無法計算能耗")
@@ -538,9 +538,8 @@ def calculate_statistics():
             result_textbox.insert(tk.END, "無法計算能耗，請檢查數據\n")
     except Exception as e:
         messagebox.showerror("錯誤", f"計算平均值或電力啟停周期時發生錯誤：{e}")
-        print(f"錯誤詳情：{e}")
+        print(f"caculate error：{e}")
 
-# 新增儲存結果的函數
 def save_results():
     try:
         # 選擇儲存檔案的路徑
